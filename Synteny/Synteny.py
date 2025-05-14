@@ -177,7 +177,6 @@ def findSyntenyJump(genome1, genome2):
 def findSyntenyReal(genome1, genome2):
     genome1size = len(genome1)
     genome2size = len(genome2)
-    blockCount = [0] * min(genome1size,genome2size)
     # block = []
     blocks = []
 
@@ -196,15 +195,17 @@ def findSyntenyReal(genome1, genome2):
     # If the genomes are the same, return early
     if min(genome1size,genome2size) == push:
         blocks.append([push,0,genome1size-1,startPos2,(startPos2-1)%genome2size])
-        blockCount[min(genome1size,genome2size)-1] = 1
         return blocks
 
-    # Iterate through the genomes
-    longestBlockLength = 1
-    while longestBlockLength > 0:
-        longestBlockLength = 0
-        for i in range(genome1size):
+    # Iterate through the genomes to find synteny blocks
+    blocksTemp = []
+    addedBlock = True
+    while addedBlock:
+        addedBlock = False
+        i = 0
+        while i < genome1size:
             length = 0
+            longestBlockLength = 0
 
             # Skip deleted genes
             while (i < genome1size and genome1[i] == -1):
@@ -244,26 +245,85 @@ def findSyntenyReal(genome1, genome2):
                         startPos2 = j
                     j = j-length
 
-        # Add the longest block found to the list of blocks
-        if (longestBlockLength > 0):
-            blockCount[longestBlockLength-1] += 1
-            for k in range(longestBlockLength):
-                #block.append(genome1[startPos1+k])
-                genome1[(startPos1+k)%genome1size] = -1
-                if (inversed): 
-                    genome2[(startPos2-k)%genome2size] = -1
+            # Add the longest block found to the list of blocks
+            if (longestBlockLength > 0):
+                addedBlock = True
+                if (inversed):
+                    blocksTemp.append([-longestBlockLength, (startPos1-push)%genome1size, (startPos1+longestBlockLength-push-1)%genome1size,
+                                                            startPos2, (startPos2-longestBlockLength+1)%genome2size])
                 else:
-                    genome2[(startPos2+k)%genome2size] = -1
-
-            if (inversed):
-                blocks.append([-longestBlockLength, (startPos1-push)%genome1size, (startPos1+longestBlockLength-push-1)%genome1size,
-                               startPos2, (startPos2-longestBlockLength+1)%genome2size])
+                    blocksTemp.append([longestBlockLength, (startPos1-push)%genome1size, (startPos1+longestBlockLength-push-1)%genome1size,
+                                                           startPos2, (startPos2+longestBlockLength-1)%genome2size])
+                i += longestBlockLength
+            # If no block found, delete the gene (because no block will ever be found for it)
             else:
-                blocks.append([longestBlockLength, (startPos1-push)%genome1size, (startPos1+longestBlockLength-push-1)%genome1size,
-                               startPos2, (startPos2+longestBlockLength-1)%genome2size]) 
-            #blockCount[longestBlockLength-1] += 1
+                genome1[i] = -1
+                i += 1
 
-    return blocks, blockCount
+        if addedBlock:
+            blocksTemp = sorted(blocksTemp, key=lambda x: abs(x[0]), reverse=True)
+            clearOverlaps(blocksTemp, genome1size, genome2size)
+            deleteGenes(genome1, genome2, blocksTemp)
+            # Move all the new blocks to the list of all blocks
+            while len(blocksTemp) != 0:
+                blocks.append(blocksTemp.pop(0))
+    
+    return sorted(blocks, key=lambda x: abs(x[0]), reverse=True)
+
+# Remove any overlapping blocks
+def clearOverlaps(blocks, genome1size, genome2size):
+    i = 0
+    while i < len(blocks):
+        j = i+1
+        while j < len(blocks):
+            # Block j begins after block i and ends before block i or it ends after block i begins and ends before i ends
+            if doesOverlap(blocks[i][1],blocks[i][2],blocks[j][1],blocks[j][2],genome1size) or \
+               doesOverlap(blocks[i][3],blocks[i][4],blocks[j][3],blocks[j][4],genome2size, blocks[i][0] < 0, blocks[j][0] < 0):
+                del blocks[j]
+            else:
+                j += 1
+        i += 1
+
+# Check if there is overlap between blocks i and j
+def doesOverlap(starti, endi, startj, endj, genomesize, iIsInversed=False, jIsInversed=False):
+    # If the block is inversed
+    if jIsInversed:
+        temp = startj
+        startj = endj
+        endj = temp
+
+    if iIsInversed:
+        temp = starti
+        starti = endi
+        endi = temp 
+
+    # Both blocks wrap around (therefore both must overlap at 0)
+    if starti > endi and startj > endj:
+        return True
+
+    # Circular case where only block i wraps around
+    if starti > endi:
+        return doesOverlap(starti,genomesize-1,startj,endj,genomesize) or doesOverlap(0,endi,startj,endj,genomesize)
+    
+    # Circular case where only block j wraps around
+    if startj > endj:
+        return doesOverlap(starti,endi,startj,genomesize-1,genomesize) or doesOverlap(starti,endi,0,endj,genomesize)
+    
+    # Regular case (no wrapping around)
+    if (starti <= endj) and (endi >= startj):
+        return True
+    
+    return False
+
+# Delete all genes found in blocks
+def deleteGenes(genome1, genome2, blocks):
+    for i in range(len(blocks)):
+        # Delete in first genome
+        for j in range(blocks[i][1],blocks[i][2]+1):
+            genome1[j] = -1
+        # Delete in second genome
+        for j in range(min(blocks[i][3],blocks[i][4]),max(blocks[i][3],blocks[i][4])+1):
+            genome2[j] = -1
 
 # Convert block count to frequency count
 def normalizeMatrix(blockCount):
@@ -382,13 +442,8 @@ def compareGenomes():
                     genome2.pop(j)
 
     print("Comparing genomes:\n" + str(genome1) + "\n" + str(genome2))
-    blockCount = findSyntenyReal(genome1,genome2)
-    print(blockCount)
-
-    # while (blockCount[-1] == 0):
-    #     blockCount.pop()
-
-    #display_results(blockCountRegular)
+    blocks = findSyntenyReal(genome1,genome2)
+    print(blocks)
 
 # Extract genome data
 def extractGeneFromRD(line):
@@ -439,18 +494,6 @@ def runATGC():
     # Make output folder
     os.makedirs("output", exist_ok=True)
 
-    # # Initiate Excel matrix and dataframe
-    # wb = Workbook()
-    # ws = wb.active
-    # ws.title = "Synteny Blocks"
-    # for col_idx, name in enumerate(genomeNames, start=2):
-    #     ws.cell(row=1, column=col_idx, value=name)
-    
-    # # Write row and column headers and data
-    # for idx, row_name in enumerate(genomeNames, start=2):
-    #     ws.cell(row=idx, column=1, value=row_name)
-    #     ws.cell(row=1, column=idx, value=row_name)
-
     # Find max length
     genomeSize = 0
     for i in range(len(genomes)):
@@ -464,7 +507,7 @@ def runATGC():
         for j in range(i+1, len(genomes)):
             # Compare genome i with genome j
             print("\t", j-i, "out of", len(genomes)-i-1)
-            blocks, blockCount = findSyntenyReal(genomes[i].copy(),genomes[j].copy())
+            blocks = findSyntenyReal(genomes[i].copy(),genomes[j].copy())
 
             # Synteny Blocks
             wb = Workbook()
@@ -476,22 +519,21 @@ def runATGC():
             wb.save(os.path.join("output", (FILE_NAME + "-" + genomeNames[i] + "-" + genomeNames[j] + "-SyntenyBlocks.xlsx")))
 
             # SBLD
+            blockCount = [0] * abs(blocks[0][0])
+            for k in range(len(blocks)):
+                blockCount[abs(blocks[k][0])-1] += 1
+            normalizeMatrix(blockCount)
+
             wb = Workbook()
             ws = wb.active
             ws.cell(row=1, column=1, value="Length")
             ws.cell(row=2, column=1, value="Frequency")
-            normalizeMatrix(blockCount)
             for row in range(len(blockCount)):  # Start at row 2 (after header)
                 ws.cell(row=row+2, column=1, value=row+1)
                 ws.cell(row=row+2, column=2, value=blockCount[row])
             wb.save(os.path.join("output", (FILE_NAME + "-" + genomeNames[i] + "-" + genomeNames[j] + "-SBLD.xlsx")))
-
-            #ws.cell(row=i+2, column=j+2, value=str(findSyntenyReal(genomes[i].copy(),genomes[j].copy())))
-            #print_results(df, genomes[i], genomes[j], findSyntenyReal(genomes[i].copy(),genomes[j].copy()))
     
     print("finished")
-    #wb.save('SBLD.xlsx')
-    #wb.save(outputFolder / (FILE_NAME + '-sbld.xlsx'))
 
 # Browse file
 def browse_file():
