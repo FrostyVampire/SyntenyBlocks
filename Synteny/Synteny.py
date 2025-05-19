@@ -318,12 +318,14 @@ def doesOverlap(starti, endi, startj, endj, genomesize, iIsInversed=False, jIsIn
 # Delete all genes found in blocks
 def deleteGenes(genome1, genome2, blocks):
     for i in range(len(blocks)):
-        # Delete in first genome
-        for j in range(blocks[i][1],blocks[i][2]+1):
-            genome1[j] = -1
-        # Delete in second genome
-        for j in range(min(blocks[i][3],blocks[i][4]),max(blocks[i][3],blocks[i][4])+1):
-            genome2[j] = -1
+        if blocks[i][0] > 0:
+            for j in range(blocks[i][0]):
+                genome1[(blocks[i][1]+j)%len(genome1)] = -1
+                genome2[(blocks[i][3]+j)%len(genome2)] = -1
+        else:
+            for j in range(-blocks[i][0]):
+                genome1[(blocks[i][1]+j)%len(genome1)] = -1
+                genome2[(blocks[i][3]-j)%len(genome2)] = -1
 
 # Convert block count to frequency count
 def normalizeMatrix(blockCount):
