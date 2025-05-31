@@ -458,7 +458,8 @@ def extractGeneFromRD(line):
     splitLine = line.split()
     genomeId= splitLine[3]
     genomeCog = int(splitLine[-1][4:])
-    return genomeId, genomeCog
+    partitionId= splitLine[4] # NC_ number
+    return genomeId, genomeCog, partitionId
  
 # Read the file and extract genome data
 def runFromFile():
@@ -476,25 +477,29 @@ def runFromFile():
     with open(filepath, "r") as file:
         lines = file.readlines()
         genomeNames = []
+        partitions = [] # format = (name, length)
         curr_id = ""
+        curr_part = ""
         for line in lines:
             if line[0] == "#":
                 continue
-            new_id, new_num = extractGeneFromRD(line)
-            if new_id != curr_id:
+            new_id, new_num, new_part = extractGeneFromRD(line)
+            if new_id != curr_id or curr_part != new_part:
                 genomes.append([])
                 genomeNames.append(new_id)
+                partitions.append(new_part)
                 curr_id = new_id
+                curr_part = new_part
             genomes[-1].append(new_num)
 
         # Print the matrix
         # for genome in genomes:
         #     print(genome)
-        return genomes, genomeNames
+        return genomes, genomeNames, partitions
 
 # Generate graph for the ATGC from read file
 def runATGC():
-    genomes, genomeNames = runFromFile()
+    genomes, genomeNames, partitions = runFromFile()
     if genomes is None:
         print("Error: Empty matrix")
         return
@@ -512,17 +517,31 @@ def runATGC():
     print("starting comparison")
     with open(os.path.join("output", FILE_NAME + ".tab"), 'w', newline='') as file:
         writer = csv.writer(file, delimiter='\t')
+        pairs_to_compare = []
         for i in range(0, len(genomes)):
-            print(i+1,"out of",len(genomes))
             for j in range(i+1, len(genomes)):
-                # Compare genome i with genome j
-                print("\t", j-i, "out of", len(genomes)-i-1)
-                blocks = findSyntenyReal(genomes[i].copy(),genomes[j].copy())
+                if(genomeNames[i] != genomeNames[j]):
+                    pairs_to_compare.append((i, j))
+        
+        def partition_sort_key(pair):
+            return len(genomes[pair[0]]) * len(genomes[pair[1]])
 
-                # Write to file
-                writer.writerow([genomeNames[i], genomeNames[j], len(genomes[i]),len(genomes[j])])
-                writer.writerows(blocks)
-                writer.writerow([])
+        pairs_to_compare = sorted(pairs_to_compare, key=partition_sort_key, reverse=True)
+        count = 1
+        for i,j in pairs_to_compare:
+            # detailed printing to test partition sort
+            # print("Comparing ", genomeNames[i], "partition", partitions[i], "with ", genomeNames[j], "partition", partitions[j], "of length", len(genomes[i]) * len(genomes[j]))
+            if(count%10 ==0 or count+5>len(pairs_to_compare)):
+                print(count,"out of",len(pairs_to_compare))
+            count += 1
+            # Compare genome i with genome j
+            # print("\t", j-i, "out of", len(genomes)-i-1)
+            blocks = findSyntenyReal(genomes[i].copy(),genomes[j].copy())
+
+            # Write to file
+            writer.writerow([genomeNames[i], partitions[i], genomeNames[j], partitions[j], len(genomes[i]),len(genomes[j])])
+            writer.writerows(blocks)
+            writer.writerow([])
 
                 # Synteny Blocks
                 # wb = Workbook()
