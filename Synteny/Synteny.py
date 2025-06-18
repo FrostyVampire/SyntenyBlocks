@@ -462,8 +462,7 @@ def extractGeneFromRD(line):
     return genomeId, genomeCog, partitionId
  
 # Read the file and extract genome data
-def runFromFile():
-    filepath = file_entry.get()
+def runFromFile(filepath):
     if not filepath:
         print("No file selected.")
         return
@@ -498,8 +497,8 @@ def runFromFile():
         return genomes, genomeNames, partitions
 
 # Generate graph for the ATGC from read file
-def runATGC():
-    genomes, genomeNames, partitions = runFromFile()
+def runATGC(genomes, genomeNames, partitions):
+    # genomes, genomeNames, partitions = runFromFile()
     if genomes is None:
         print("Error: Empty matrix")
         return
@@ -513,8 +512,7 @@ def runATGC():
         if genomeSize < len(genomes[i]):
             genomeSize = len(genomes[i])
 
-    # Compare every pair of genomes and write the results in Excel files
-    print("starting comparison")
+    # Compare every pair of genomes and write the results in a file
     with open(os.path.join("output", FILE_NAME + ".tab"), 'w', newline='') as file:
         writer = csv.writer(file, delimiter='\t')
         pairs_to_compare = []
@@ -531,51 +529,83 @@ def runATGC():
         for i,j in pairs_to_compare:
             # detailed printing to test partition sort
             # print("Comparing ", genomeNames[i], "partition", partitions[i], "with ", genomeNames[j], "partition", partitions[j], "of length", len(genomes[i]) * len(genomes[j]))
-            if(count%10 ==0 or count+5>len(pairs_to_compare)):
+            if(count%10 ==0):
                 print(count,"out of",len(pairs_to_compare))
             count += 1
             # Compare genome i with genome j
             # print("\t", j-i, "out of", len(genomes)-i-1)
             blocks = findSyntenyReal(genomes[i].copy(),genomes[j].copy())
 
-            # Write to file
+            # Write to tab file
             writer.writerow([genomeNames[i], partitions[i], genomeNames[j], partitions[j], len(genomes[i]),len(genomes[j])])
             writer.writerows(blocks)
             writer.writerow([])
 
-                # Synteny Blocks
-                # wb = Workbook()
-                # ws = wb.active
-                # titles = [genomeNames[i] + " Start", genomeNames[i] + " End", genomeNames[j] + " Start", genomeNames[j] + " End", "Length"]
-                # ws.append(titles)
-                # ws.append([len(genomes[i]),len(genomes[j])])
-                # for block in blocks:
-                #     ws.append(block)
-                # wb.save(os.path.join("output", (FILE_NAME + "-" + genomeNames[i] + "-" + genomeNames[j] + "-SyntenyBlocks.xlsx")))
-
-                # # SBLD
-                # blockCount = [0] * abs(blocks[0][0])
-                # for k in range(len(blocks)):
-                #     blockCount[abs(blocks[k][0])-1] += 1
-                # normalizeMatrix(blockCount)
-
-                # wb = Workbook()
-                # ws = wb.active
-                # ws.cell(row=1, column=1, value="Length")
-                # ws.cell(row=2, column=1, value="Frequency")
-                # for row in range(len(blockCount)):  # Start at row 2 (after header)
-                #     ws.cell(row=row+2, column=1, value=row+1)
-                #     ws.cell(row=row+2, column=2, value=blockCount[row])
-                # wb.save(os.path.join("output", (FILE_NAME + "-" + genomeNames[i] + "-" + genomeNames[j] + "-SBLD.xlsx")))
+            # Write to Excel file
+            # wb = Workbook()
+            # ws = wb.active
+            # titles = [genomeNames[i] + " Start", genomeNames[i] + " End", genomeNames[j] + " Start", genomeNames[j] + " End", "Length"]
+            # ws.append(titles)
+            # ws.append([len(genomes[i]),len(genomes[j])])
+            # for block in blocks:
+            #     ws.append(block)
+            # wb.save(os.path.join("output", (FILE_NAME + "-" + genomeNames[i] + "-" + genomeNames[j] + "-SyntenyBlocks.xlsx")))
     
     print("finished")
 
 # Browse file
 def browse_file():
-    filename = filedialog.askopenfilename(title="Select Data File", filetypes=(("Pseudo-terminal utilities", "*.pty"), ("All files", "*.*")))
-    if filename:
-        file_entry.delete(0, tk.END)
-        file_entry.insert(0, filename)
+    # Ask if the user wants 
+    dialog = tk.Toplevel()
+    dialog.title("Select File or Folder")
+    dialog.geometry("400x150")
+    
+    def select_file():
+        path = filedialog.askopenfilename(filetypes=(("Pseudo-terminal utilities", "*.pty"), ("All files", "*.*")))
+        if path:
+            file_entry.delete(0, tk.END)
+            file_entry.insert(0, path)
+        dialog.destroy()
+    
+    def select_folder():
+        path = filedialog.askdirectory()
+        if path:
+            file_entry.delete(0, tk.END)
+            file_entry.insert(0, path)
+        dialog.destroy()
+    
+    ttk.Label(dialog, text="Choose selection type:").pack(pady=10)
+    ttk.Button(dialog, text="📄 Select File", command=select_file).pack(fill='x', padx=50, pady=5)
+    ttk.Button(dialog, text="📁 Select Folder", command=select_folder).pack(fill='x', padx=50, pady=5)
+
+# Run the function on a single file or every file in a folder
+def runFile():
+    path = file_entry.get()
+    if not path:
+        print("No file or folder selected.")
+        return
+    
+    # If a file is selected, process it
+    if os.path.isfile(path):
+        print(f"Processing: {filename}")
+        genomes, genomeNames, partitions = runFromFile(path)
+        runATGC(genomes, genomeNames, partitions)
+    
+    # If a folder is selected, process all files in it
+    elif os.path.isdir(path):
+        for filename in sorted(os.listdir(path)):
+            filepath = os.path.join(path, filename)
+            if os.path.isfile(filepath):
+                try:
+                    print(f"Processing: {filename}")
+                    genomes, genomeNames, partitions = runFromFile(filepath)
+                    runATGC(genomes, genomeNames, partitions)
+                except Exception as e:
+                    print(f"Error processing {filename}: {str(e)}")
+    
+    else:
+        print("Invalid path")
+
 
 # GUI setup
 root = tk.Tk()
@@ -598,7 +628,7 @@ file_entry = ttk.Entry(frame_left)
 file_entry.pack()
 browse_button = ttk.Button(frame_left, text="Browse", command=browse_file)
 browse_button.pack()
-file_sim_button = ttk.Button(frame_left, text="Find synteny blocks in file", command=runATGC)
+file_sim_button = ttk.Button(frame_left, text="Find synteny blocks in file", command=runFile)
 file_sim_button.pack(pady=(10,30))
 
 # Jump simulation
