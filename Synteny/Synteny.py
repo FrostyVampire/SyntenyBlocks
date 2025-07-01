@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
 from scipy.stats import wasserstein_distance
-# from openpyxl import Workbook
+from itertools import product
 import csv
 import os
 
@@ -515,16 +515,33 @@ def runATGC(genomes, genomeNames, partitions):
     # Compare every pair of genomes and write the results in a file
     with open(os.path.join("output", FILE_NAME + ".tab"), 'w', newline='') as file:
         writer = csv.writer(file, delimiter='\t')
-        pairs_to_compare = []
-        for i in range(0, len(genomes)):
-            for j in range(i+1, len(genomes)):
-                if(genomeNames[i] != genomeNames[j]):
-                    pairs_to_compare.append((i, j))
-        
-        def partition_sort_key(pair):
-            return len(genomes[pair[0]]) * len(genomes[pair[1]])
 
-        pairs_to_compare = sorted(pairs_to_compare, key=partition_sort_key, reverse=True)
+        # Group all partitions of each genome into 1 group
+        genomeGroups = {}
+        for idx, name in enumerate(genomeNames):
+            if name not in genomeGroups:
+                genomeGroups[name] = []
+            genomeGroups[name].append(idx)
+        
+        uniqueNames = list(genomeGroups.keys())
+
+        pairs_to_compare = []
+        for i in range(len(uniqueNames)):
+            for j in range(i+1, len(uniqueNames)):
+                # Get all partitions for both genomes
+                group1 = genomeGroups[uniqueNames[i]]
+                group2 = genomeGroups[uniqueNames[j]]
+                
+                # Generate all combinations between partitions
+                for pair in product(group1, group2):
+                    pairs_to_compare.append(pair)
+
+        # Remnant before we did grouping
+        # for i in range(0, len(genomes)):
+        #     for j in range(i+1, len(genomes)):
+        #         if(genomeNames[i] != genomeNames[j]):
+        #             pairs_to_compare.append((i, j))
+        
         count = 1
         for i,j in pairs_to_compare:
             # detailed printing to test partition sort
@@ -537,25 +554,15 @@ def runATGC(genomes, genomeNames, partitions):
             blocks = findSyntenyReal(genomes[i].copy(),genomes[j].copy())
 
             # Write to tab file
-            writer.writerow([genomeNames[i], partitions[i], genomeNames[j], partitions[j], len(genomes[i]),len(genomes[j])])
+            writer.writerow([genomeNames[i], genomeNames[j], partitions[i], partitions[j], len(genomes[i]), len(genomes[j])])
             writer.writerows(blocks)
             writer.writerow([])
-
-            # Write to Excel file
-            # wb = Workbook()
-            # ws = wb.active
-            # titles = [genomeNames[i] + " Start", genomeNames[i] + " End", genomeNames[j] + " Start", genomeNames[j] + " End", "Length"]
-            # ws.append(titles)
-            # ws.append([len(genomes[i]),len(genomes[j])])
-            # for block in blocks:
-            #     ws.append(block)
-            # wb.save(os.path.join("output", (FILE_NAME + "-" + genomeNames[i] + "-" + genomeNames[j] + "-SyntenyBlocks.xlsx")))
     
     print("finished")
 
 # Browse file
 def browse_file():
-    # Ask if the user wants 
+    # Ask if the user wants to select a single file or an entire folder
     dialog = tk.Toplevel()
     dialog.title("Select File or Folder")
     dialog.geometry("400x150")
@@ -587,7 +594,7 @@ def runFile():
     
     # If a file is selected, process it
     if os.path.isfile(path):
-        print(f"Processing: {filename}")
+        print(f"Processing: {os.path.basename(path)}")
         genomes, genomeNames, partitions = runFromFile(path)
         runATGC(genomes, genomeNames, partitions)
     
