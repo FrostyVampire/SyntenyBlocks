@@ -427,8 +427,14 @@ def runSimulation():
 def compareGenomes():
     genome1 = list(map(int, str(gen1.get()).split()))
     genome2 = list(map(int, str(gen2.get()).split()))
+    reduceGenomes(genome1,genome2)
 
-    # Clean singletons
+    print("Comparing genomes:\n" + str(genome1) + "\n" + str(genome2))
+    blocks = findSyntenyReal(genome1,genome2)
+    print(blocks)
+
+# Reduce 2 genomes to their common gene complement
+def reduceGenomes(genome1, genome2):
     genomeCompare1 = [0] * (len(genome1) + len(genome2))
     genomeCompare2 = [0] * (len(genome1) + len(genome2))
     for i in range(max(len(genome1), len(genome2))):
@@ -448,10 +454,6 @@ def compareGenomes():
             for j in range(len(genome2)-1, -1, -1):
                 if (genome2[j] == i+1):
                     genome2.pop(j)
-
-    print("Comparing genomes:\n" + str(genome1) + "\n" + str(genome2))
-    blocks = findSyntenyReal(genome1,genome2)
-    print(blocks)
 
 # Extract genome data
 def extractGeneFromRD(line):
@@ -513,35 +515,30 @@ def runATGC(genomes, genomeNames, partitions):
             genomeSize = len(genomes[i])
 
     # Compare every pair of genomes and write the results in a file
-    with open(os.path.join("output", FILE_NAME + ".tab"), 'w', newline='') as file:
+    # Group all partitions of each genome into 1 group
+    genomeGroups = {}
+    for idx, name in enumerate(genomeNames):
+        if name not in genomeGroups:
+            genomeGroups[name] = []
+        genomeGroups[name].append(idx)
+    
+    uniqueNames = list(genomeGroups.keys())
+    pairs_to_compare = []
+    for i in range(len(uniqueNames)):
+        for j in range(i+1, len(uniqueNames)):
+            # Get all partitions for both genomes
+            group1 = genomeGroups[uniqueNames[i]]
+            group2 = genomeGroups[uniqueNames[j]]
+            
+            # Generate all combinations between partitions
+            for pair in product(group1, group2):
+                pairs_to_compare.append(pair)
+
+    # Write first comparison to file (genomes reduced to common gene complement)
+    with open(os.path.join("output", FILE_NAME + " - reduced.tab"), 'w', newline='') as file:
         writer = csv.writer(file, delimiter='\t')
-
-        # Group all partitions of each genome into 1 group
-        genomeGroups = {}
-        for idx, name in enumerate(genomeNames):
-            if name not in genomeGroups:
-                genomeGroups[name] = []
-            genomeGroups[name].append(idx)
         
-        uniqueNames = list(genomeGroups.keys())
-
-        pairs_to_compare = []
-        for i in range(len(uniqueNames)):
-            for j in range(i+1, len(uniqueNames)):
-                # Get all partitions for both genomes
-                group1 = genomeGroups[uniqueNames[i]]
-                group2 = genomeGroups[uniqueNames[j]]
-                
-                # Generate all combinations between partitions
-                for pair in product(group1, group2):
-                    pairs_to_compare.append(pair)
-
-        # Remnant before we did grouping
-        # for i in range(0, len(genomes)):
-        #     for j in range(i+1, len(genomes)):
-        #         if(genomeNames[i] != genomeNames[j]):
-        #             pairs_to_compare.append((i, j))
-        
+        print("First comparison - genomes reduced to common gene complement")
         count = 1
         for i,j in pairs_to_compare:
             # detailed printing to test partition sort
@@ -549,8 +546,28 @@ def runATGC(genomes, genomeNames, partitions):
             if(count%10 ==0):
                 print(count,"out of",len(pairs_to_compare))
             count += 1
-            # Compare genome i with genome j
-            # print("\t", j-i, "out of", len(genomes)-i-1)
+            genome1 = genomes[i].copy()
+            genome2 = genomes[j].copy()
+            reduceGenomes(genome1,genome2)
+            blocks = findSyntenyReal(genome1,genome2)
+
+            # Write to tab file
+            writer.writerow([genomeNames[i], genomeNames[j], partitions[i], partitions[j], len(genomes[i]), len(genomes[j])])
+            writer.writerows(blocks)
+            writer.writerow([])
+
+    # Write second comparison to file (genomes left untouched)
+    with open(os.path.join("output", FILE_NAME + " - intact.tab"), 'w', newline='') as file:
+        writer = csv.writer(file, delimiter='\t')
+        
+        print("Second comparison - genomes are untouched")
+        count = 1
+        for i,j in pairs_to_compare:
+            # detailed printing to test partition sort
+            # print("Comparing ", genomeNames[i], "partition", partitions[i], "with ", genomeNames[j], "partition", partitions[j], "of length", len(genomes[i]) * len(genomes[j]))
+            if(count%10 ==0):
+                print(count,"out of",len(pairs_to_compare))
+            count += 1
             blocks = findSyntenyReal(genomes[i].copy(),genomes[j].copy())
 
             # Write to tab file
