@@ -181,6 +181,10 @@ def findSyntenyReal(genome1, genome2):
     # block = []
     blocks = []
 
+    # If either genome is empty, skip
+    if (genome1size == 0 or genome2size == 0):
+        return blocks
+
     # Because the genomes are circular, move the last gene in the first genome to position 0 until it is no longer the start of a block
     push = 0
     j = 0
@@ -435,8 +439,9 @@ def compareGenomes():
 
 # Reduce 2 genomes to their common gene complement
 def reduceGenomes(genome1, genome2):
-    genomeCompare1 = [0] * (len(genome1) + len(genome2))
-    genomeCompare2 = [0] * (len(genome1) + len(genome2))
+    maxGene = max(max(genome1), max(genome2))
+    genomeCompare1 = [0] * maxGene
+    genomeCompare2 = [0] * maxGene
     for i in range(max(len(genome1), len(genome2))):
         if (i < len(genome1)):
             genomeCompare1[genome1[i]-1] = 1
